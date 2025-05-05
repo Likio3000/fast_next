@@ -1,195 +1,224 @@
-import os
-import pyperclip
+#!/usr/bin/env python3
+"""
+sc2.py – collect the text source of a project into one big clipboard / file
+         while honouring .gitignore and avoiding duplicate output.
+"""
+
+from __future__ import annotations
+
 import argparse
+import os
+import sys
+from pathlib import Path
+
+# ---------- optional deps ---------- #
+try:
+    import pyperclip  # type: ignore
+except ImportError:
+    pyperclip = None
 
 try:
-    import pathspec
+    import pathspec  # type: ignore
 except ImportError:
     pathspec = None
-    print("Warning: 'pathspec' library not found. .gitignore support will be disabled.")
+# ----------------------------------- #
 
-# --- Configuration ---
-
-# Add file extensions you want to include (lowercase)
+# --------- user‑tweakable knobs -------- #
 ALLOWED_EXTENSIONS = {
-    '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.htm', '.css', '.scss', '.sass',
-    '.json', '.yaml', '.yml', '.xml', '.md', '.txt', '.sh', '.bash', '.zsh',
-    '.java', '.cs', '.cpp', '.c', '.h', '.hpp', '.go', '.rs', '.php', '.rb',
-    '.sql'
+    ".py",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".html",
+    ".htm",
+    ".css",
+    ".scss",
+    ".sass",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".md",
+    ".txt",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".java",
+    ".cs",
+    ".cpp",
+    ".c",
+    ".h",
+    ".hpp",
+    ".go",
+    ".rs",
+    ".php",
+    ".rb",
+    ".sql",
 }
 
-# Add specific full filenames to include regardless of extension
 ALLOWED_FILENAMES = {
-    'dockerfile', 'docker-compose.yml', '.env.example', '.gitignore',
-    'requirements.txt', 'package.json', 'composer.json', 'pom.xml', 'gemfile'
+    "dockerfile",
+    "docker-compose.yml",
+    ".env.example",
+    ".gitignore",
+    "requirements.txt",
+    "package.json",
+    "composer.json",
+    "pom.xml",
+    "gemfile",
 }
 
-# Add directory names to completely exclude (lowercase)
 EXCLUDED_DIRS = {
-    '.git', '.svn', '.hg', '__pycache__', 'node_modules', 'vendor', 'egg-info',
-    'target', 'build', 'dist', 'out', 'bin', 'obj', '.vscode', '.idea', '.next', '.venv', 'venv', '.env', 'env'
+    ".git",
+    ".svn",
+    ".hg",
+    "__pycache__",
+    "node_modules",
+    "vendor",
+    "egg-info",
+    "target",
+    "build",
+    "dist",
+    "out",
+    "bin",
+    "obj",
+    ".vscode",
+    ".idea",
+    ".next",
+    ".venv",
+    "venv",
+    ".env",
+    "env",
 }
 EXCLUDED_DIRS = {d.lower() for d in EXCLUDED_DIRS}
 
-# Add specific filenames to exclude (lowercase)
 EXCLUDED_FILES = {
-    '.env', 'credentials.json', 'secrets.yaml',
-    'package-lock.json', 'yarn.lock', 'composer.lock'
+    ".env",
+    "credentials.json",
+    "secrets.yaml",
+    "package-lock.json",
+    "yarn.lock",
+    "composer.lock",
 }
 EXCLUDED_FILES = {f.lower() for f in EXCLUDED_FILES}
 
-# Maximum individual file size to include (in bytes)
-MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB limit per file
+MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024  # 1 MiB
+DEFAULT_OUTPUT_FILE = "sc2_output.txt"
+# -------------------------------------- #
 
 
-def load_gitignore(project_dir):
-    """
-    Load .gitignore from the project directory if available.
-    Returns a compiled pathspec object or None.
-    """
-    gitignore_path = os.path.join(project_dir, '.gitignore')
-    if os.path.exists(gitignore_path) and pathspec:
-        try:
-            with open(gitignore_path, 'r', encoding='utf-8', errors='ignore') as f:
-                lines = f.readlines()
-            spec = pathspec.PathSpec.from_lines('gitwildmatch', lines)
-            print("Loaded .gitignore patterns.")
-            return spec
-        except Exception as e:
-            print(f"Error loading .gitignore: {e}")
+def load_gitignore(project_dir: Path):
+    if not pathspec:
+        return None
+    gi_path = project_dir / ".gitignore"
+    if gi_path.exists():
+        with gi_path.open(encoding="utf-8", errors="ignore") as fh:
+            return pathspec.PathSpec.from_lines("gitwildmatch", fh)
     return None
 
 
-def collect_project_contents(project_dir):
-    """
-    Collects relevant text file contents from a project directory.
-    """
-    all_contents = []
-    project_dir = os.path.abspath(project_dir)
-
-    if not os.path.isdir(project_dir):
-        return f"Error: Directory not found: {project_dir}", False
-
-    print(f"Scanning directory: {project_dir}")
-    #print("Ignoring directories:", EXCLUDED_DIRS)
-    #print("Ignoring files:", EXCLUDED_FILES)
-    #print("Allowed extensions:", ALLOWED_EXTENSIONS)
-    #print("Allowed filenames:", ALLOWED_FILENAMES)
-    print("---")
-
+def collect_project_contents(
+    project_dir: Path,
+    exclude_extra: set[str] | None = None,
+    verbose: bool = False,
+):
     gitignore_spec = load_gitignore(project_dir)
+    visited: set[str] = set()
+    pieces: list[str] = []
 
-    total_files_scanned = excluded_by_type = excluded_by_name = excluded_by_dir = 0
-    excluded_by_size = excluded_by_gitignore = excluded_egg_info = read_errors = included_files_count = 0
+    exclude_names = EXCLUDED_FILES.union({x.lower() for x in exclude_extra or set()})
 
     for root, dirs, files in os.walk(project_dir, topdown=True):
-        # Filter out excluded dirs immediately
+        # prune unwanted dirs in‑place
         dirs[:] = [d for d in dirs if d.lower() not in EXCLUDED_DIRS]
 
-        # Skip entire directory if any segment matches excluded dirs
-        rel_root = os.path.relpath(root, project_dir)
-        segments = [seg.lower() for seg in rel_root.split(os.sep) if seg]
-        if set(segments) & EXCLUDED_DIRS:
-            excluded_by_dir += len(dirs) + len(files)
-            dirs[:] = []
-            continue
-
         for filename in files:
-            total_files_scanned += 1
-            file_path = os.path.join(root, filename)
-            rel_path = os.path.relpath(file_path, project_dir)
+            rel_path = os.path.relpath(os.path.join(root, filename), project_dir)
+            rel_lower = rel_path.lower()
 
-            # Skip egg-info files
-            if 'egg-info' in filename.lower():
-                excluded_egg_info += 1
+            if rel_lower in visited:
+                continue
+            visited.add(rel_lower)
+
+            if filename.lower() in exclude_names:
                 continue
 
-            # Exclude specific filenames
-            if filename.lower() in EXCLUDED_FILES:
-                excluded_by_name += 1
-                continue
-
-            # Check extension or specific filename
-            ext = os.path.splitext(filename)[1].lower()
+            ext = Path(filename).suffix.lower()
             if ext not in ALLOWED_EXTENSIONS and filename.lower() not in ALLOWED_FILENAMES:
-                excluded_by_type += 1
                 continue
 
-            # .gitignore patterns
             if gitignore_spec and gitignore_spec.match_file(rel_path):
-                excluded_by_gitignore += 1
                 continue
 
-            # Size check
+            full_path = project_dir / rel_path
             try:
-                size = os.path.getsize(file_path)
-                if size > MAX_FILE_SIZE_BYTES:
-                    excluded_by_size += 1
+                if full_path.stat().st_size > MAX_FILE_SIZE_BYTES:
                     continue
             except OSError:
-                read_errors += 1
                 continue
 
-            # Read content
             try:
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-                header = f"--- START FILE: {rel_path} ---\n"
-                footer = f"\n--- END FILE: {rel_path} ---\n\n"
-                all_contents.append(header + content + footer)
-                included_files_count += 1
+                with full_path.open("r", encoding="utf-8", errors="ignore") as fh:
+                    content = fh.read()
             except Exception:
-                read_errors += 1
+                continue
 
-    # Summary
-    print("---")
-    print(f"Total scanned: {total_files_scanned}")
-    print(f"Included files: {included_files_count}")
-    print(f"Excluded by type: {excluded_by_type}")
-    print(f"Excluded by name: {excluded_by_name}")
-    print(f"Excluded by dir: {excluded_by_dir}")
-    print(f"Excluded by size: {excluded_by_size}")
-    print(f"Excluded by gitignore: {excluded_by_gitignore}")
-    print(f"Excluded egg-info: {excluded_egg_info}")
-    print(f"Read errors: {read_errors}")
-    print("---")
+            pieces.append(f"--- START FILE: {rel_path} ---\n{content}\n--- END FILE: {rel_path} ---\n")
 
-    if not all_contents:
-        return "No relevant files found or collected.", True
+            if verbose:
+                print("✓", rel_path)
 
-    return "".join(all_contents), True
+    return "".join(pieces)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Copy project text files to clipboard / file")
+    ap.add_argument("project_dir", nargs="?", default=".", help="Project directory (default: .)")
+    ap.add_argument(
+        "-w",
+        "--write",
+        nargs="?",
+        const=DEFAULT_OUTPUT_FILE,
+        metavar="FILE",
+        help=f"write collected output to FILE (default: {DEFAULT_OUTPUT_FILE})",
+    )
+    ap.add_argument("-t", "--tests", action="store_true", help="include tests/ directory")
+    ap.add_argument("-v", "--verbose", action="store_true", help="print every included file")
+    ns = ap.parse_args()
+
+    if not ns.tests:
+        EXCLUDED_DIRS.add("tests")
+
+    project_dir = Path(ns.project_dir).resolve()
+    extra_excludes = {ns.write} if ns.write else set()
+
+    output = collect_project_contents(project_dir, exclude_extra=extra_excludes, verbose=ns.verbose)
+
+    if not output:
+        print("No relevant files found – nothing copied.")
+        sys.exit(1)
+
+    # clipboard
+    if pyperclip:
+        try:
+            pyperclip.copy(output)
+            if ns.verbose:
+                print(f"(copied {len(output):,} characters to clipboard)")
+        except pyperclip.PyperclipException:
+            if ns.verbose:
+                print("Warning: could not access the system clipboard.")
+
+    # optional file
+    if ns.write:
+        out_path = Path(ns.write).resolve()
+        out_path.write_text(output, encoding="utf-8")
+        print(f"Wrote {len(output):,} characters to {out_path}")
+
+    if not ns.write and not pyperclip:
+        # fall‑back: print to stdout if nowhere else
+        print(output)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Collect contents of text files in a project and copy to clipboard."
-    )
-    parser.add_argument("project_dir", nargs='?', default='.', help="Project directory (default: current)")
-    parser.add_argument('-t', '--tests', action='store_true', help="Include 'tests/' directory")
-    parser.add_argument('-w', '--write', action='store_true', help="Write output to 'sc2_output.txt' in project root")
-    args = parser.parse_args()
-
-    # By default exclude tests unless -t is provided
-    if not args.tests:
-        EXCLUDED_DIRS.add('tests')
-
-    output, success = collect_project_contents(args.project_dir)
-    if success:
-        # Always copy to clipboard
-        try:
-            pyperclip.copy(output)
-            print(f"Copied {len(output)} characters to clipboard.")
-        except Exception as e:
-            print(f"Warning: Could not copy to clipboard: {e}")
-
-        # Optionally write to file
-        if args.write:
-            out_path = os.path.join(os.path.abspath(args.project_dir), 'sc2_output.txt')
-            try:
-                with open(out_path, 'w', encoding='utf-8') as f:
-                    f.write(output)
-                print(f"Written output to {out_path}")
-            except Exception as e:
-                print(f"Error writing output file: {e}")
-    else:
-        print(output)
+    main()
