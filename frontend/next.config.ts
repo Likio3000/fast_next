@@ -1,7 +1,9 @@
-import type { NextConfig } from "next";
+// frontend/next.config.ts
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  /* any other options you already have */
+  serverExternalPackages: ['browserslist'],
+}
 
-export default nextConfig;
+export default nextConfig
