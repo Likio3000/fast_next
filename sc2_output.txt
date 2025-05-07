@@ -74,7 +74,6 @@ frontend/.vercel/
 
 --- END FILE: .gitignore ---
 --- START FILE: sc2.py ---
-#!/usr/bin/env python3
 """
 sc2.py – collect the text source of a project into one big clipboard / file
          while honouring .gitignore and avoiding duplicate output.
@@ -92,6 +91,8 @@ try:
     import pyperclip  # type: ignore
 except ImportError:
     pyperclip = None
+    print("Note: Clipboard functionality ('pyperclip') is not available. Install it with 'uv add pyperclip'.")
+
 
 try:
     import pathspec  # type: ignore
