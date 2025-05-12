@@ -1,0 +1,92 @@
+<?xml version="1.0" ?>
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="160" viewBox="0 0 600 160" fill="none">
+	
+  
+	<style>
+    .text-base {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 64px;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+    .text-shadow {
+      fill: #111122;
+      transform: translate(2px, 2px);
+    }
+    .text-main {
+      fill: url(#grad1);
+      filter: url(#glow);
+    }
+  </style>
+	
+  
+	<defs>
+		
+    
+		<linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+			
+      
+			<stop offset="0%" style="stop-color:#00FFF7; stop-opacity:1"/>
+			
+      
+			<stop offset="100%" style="stop-color:#8F00FF; stop-opacity:1"/>
+			
+    
+		</linearGradient>
+		
+    
+		<filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+			
+      
+			<feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+			
+      
+			<feMerge>
+				
+        
+				<feMergeNode in="blur"/>
+				
+        
+				<feMergeNode in="SourceGraphic"/>
+				
+      
+			</feMerge>
+			
+    
+		</filter>
+		
+  
+	</defs>
+	
+  
+	<!-- Symbol integrated into the L of Likio -->
+	
+  
+	<g transform="translate(20, 20)">
+		
+    
+		<polygon points="0,0 0,100 20,110 20,10" fill="#111122"/>
+		
+    
+		<polygon points="20,10 20,110 30,100 30,0" fill="url(#grad1)" filter="url(#glow)"/>
+		
+    
+		<circle cx="15" cy="55" r="6" fill="#8F00FF"/>
+		
+    
+		<circle cx="15" cy="75" r="3" fill="#00FFF7"/>
+		
+  
+	</g>
+	
+  
+	<!-- Text with slight 3D shadow -->
+	
+  
+	<text x="60" y="100" class="text-base text-shadow">ikioCode</text>
+	
+  
+	<text x="60" y="100" class="text-base text-main">ikioCode</text>
+	
+
+</svg>

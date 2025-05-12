@@ -2,11 +2,12 @@
 'use client';
 
 import { useState, useEffect, useRef, FormEvent } from 'react';
-import { Send, User, Cpu, Copy, AlertTriangle, CornerDownLeft } from 'lucide-react';
+import Image from 'next/image'; // Import Next.js Image component
+import { Send, User, Cpu, Copy, AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Message {
-  id: string; // Add an ID for better keying
+  id: string;
   role: 'user' | 'assistant' | 'error';
   text: string;
 }
@@ -24,10 +25,9 @@ export default function Home() {
 
   useEffect(scrollToBottom, [messages]);
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'; // Reset height
+      textareaRef.current.style.height = 'auto';
       const scrollHeight = textareaRef.current.scrollHeight;
       textareaRef.current.style.height = `${scrollHeight}px`;
     }
@@ -42,18 +42,17 @@ export default function Home() {
     setInput('');
     setIsLoading(true);
 
-    // Ensure textarea resizes down after sending
     setTimeout(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-        }
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
     }, 0);
 
     try {
       const res = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_message: userInput.text }), // Send original input text
+        body: JSON.stringify({ user_message: userInput.text }),
       });
 
       if (!res.ok) {
@@ -71,25 +70,43 @@ export default function Home() {
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      // Optional: show a temporary "Copied!" message
-    }).catch(err => console.error('Failed to copy: ', err));
+    navigator.clipboard.writeText(text).catch(err => console.error('Failed to copy: ', err));
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-3xl mx-auto bg-white dark:bg-slate-800 shadow-xl">
-      {/* Header (Optional) */}
-      <header className="p-4 border-b border-slate-200 dark:border-slate-700">
-        <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">AI Assistant</h1>
+    <div className="relative flex flex-col h-screen max-w-3xl mx-auto bg-white dark:bg-slate-900 shadow-xl overflow-hidden"> {/* Added overflow-hidden */}
+      {/* Cat Image - Decorative Top Right */}
+      <div className="absolute top-3 right-3 sm:top-5 sm:right-5 z-0 opacity-50 pointer-events-none"> {/* z-0, pointer-events-none */}
+        <Image 
+          src="/cat.png" 
+          alt="" // Decorative image, empty alt
+          width={70} // Adjust size as needed
+          height={70} 
+          className="rounded-full" // Optional styling
+        />
+      </div>
+
+      {/* Header with Logo */}
+      <header className="relative z-10 p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-center sm:justify-start">
+        <Image 
+          src="/logo.svg" 
+          alt="AI Assistant Logo" 
+          width={150} // Adjust as per your logo's aspect ratio
+          height={35} 
+          priority // Good for LCP elements
+        />
       </header>
 
       {/* Messages Area */}
-      <main className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50 dark:bg-slate-900/50">
+      <main 
+        className={`flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900/70 relative z-10 
+                   ${messages.length === 0 && !isLoading ? 'flex flex-col' : 'space-y-4'}`}
+      >
         {messages.length === 0 && !isLoading && (
-          <div className="text-center text-slate-500 dark:text-slate-400 pt-10">
-            <Cpu size={48} className="mx-auto mb-2" />
-            <p className="text-lg font-medium">Welcome!</p>
-            <p>Ask me anything to get started.</p>
+          <div className="flex-grow flex flex-col justify-center items-center text-center text-slate-500 dark:text-slate-400 pb-16"> {/* Added pb-16 to push it up slightly from absolute center */}
+            <Cpu size={52} className="mx-auto mb-5 text-slate-400 dark:text-slate-500" />
+            <p className="text-xl font-medium mb-1.5">Welcome!</p>
+            <p className="text-base">Ask me anything to get started.</p>
           </div>
         )}
         {messages.map((m) => (
@@ -100,23 +117,22 @@ export default function Home() {
             }`}
           >
             <div
-              className={`max-w-[80%] p-3 rounded-xl shadow-sm ${
+              className={`max-w-[80%] p-3.5 rounded-2xl shadow-md ${ // Increased rounding and padding slightly
                 m.role === 'user'
-                  ? 'bg-blue-500 text-white rounded-br-none'
+                  ? 'bg-blue-600 text-white rounded-br-lg' // Sharper corner for "tail"
                   : m.role === 'assistant'
-                  ? 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-none relative group'
-                  : 'bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 rounded-bl-none flex items-center gap-2'
+                  ? 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-lg relative group' // Sharper corner for "tail"
+                  : 'bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 rounded-bl-lg flex items-center gap-2' // Sharper corner for "tail"
               }`}
             >
               {m.role === 'error' && <AlertTriangle size={18} className="flex-shrink-0" />}
-              <div className="prose prose-sm dark:prose-invert max-w-none break-words">
-                {/* Using ReactMarkdown for assistant and error messages */}
+              <div className="prose prose-sm dark:prose-invert max-w-none break-words leading-relaxed"> {/* Added leading-relaxed */}
                 {m.role === 'user' ? m.text : <ReactMarkdown>{m.text}</ReactMarkdown>}
               </div>
               {m.role === 'assistant' && (
                 <button
                   onClick={() => copyToClipboard(m.text)}
-                  className="absolute -top-2 -right-2 p-1 bg-slate-200 dark:bg-slate-600 rounded-full text-slate-500 dark:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-2.5 -right-2.5 p-1.5 bg-slate-200 dark:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-150"
                   aria-label="Copy message"
                 >
                   <Copy size={14} />
@@ -126,9 +142,9 @@ export default function Home() {
           </div>
         ))}
         {isLoading && (
-          <div className="flex justify-start">
-            <div className="max-w-[80%] p-3 rounded-xl shadow-sm bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-none">
-              <div className="flex items-center space-x-1">
+          <div className="flex justify-start animate-fadeInUp">
+            <div className="max-w-[80%] p-3.5 rounded-2xl shadow-md bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-lg">
+              <div className="flex items-center space-x-1.5">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Assistant is typing</span>
                 <div className="w-1.5 h-1.5 bg-current rounded-full animate-dotFlashing"></div>
                 <div className="w-1.5 h-1.5 bg-current rounded-full animate-dotFlashing-delay1"></div>
@@ -141,8 +157,8 @@ export default function Home() {
       </main>
 
       {/* Input Area */}
-      <footer className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-        <form onSubmit={handleSend} className="flex items-end space-x-2">
+      <footer className="relative z-10 p-3 sm:px-4 sm:pb-4 sm:pt-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"> {/* Added more horizontal padding via sm:px-4 */}
+        <form onSubmit={handleSend} className="flex items-end space-x-2 sm:space-x-3">
           <textarea
             ref={textareaRef}
             value={input}
@@ -153,22 +169,29 @@ export default function Home() {
                 handleSend();
               }
             }}
-            placeholder="Ask me anything…"
-            className="flex-1 p-3 border border-slate-300 dark:border-slate-600 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none dark:bg-slate-700 dark:text-slate-100 min-h-[48px] max-h-[150px] overflow-y-auto"
+            placeholder="Message AI Assistant…"
+            className="flex-1 p-3.5 border border-slate-300 dark:border-slate-600 rounded-xl // Changed to rounded-xl (was 2xl, button is also xl)
+                       resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 
+                       dark:focus:border-blue-500 outline-none dark:bg-slate-700 dark:text-slate-100 
+                       min-h-[52px] max-h-[150px] overflow-y-auto transition-shadow duration-150 focus:shadow-md" // Increased min-h, added focus:shadow
             rows={1}
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed h-[48px] flex items-center justify-center"
+            className="p-3 bg-blue-600 text-white rounded-xl // Consistent rounding with textarea
+                       hover:bg-blue-700 focus:outline-none focus:ring-2 
+                       focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800 focus:ring-opacity-75 
+                       disabled:opacity-60 disabled:cursor-not-allowed 
+                       h-[52px] w-[52px] flex items-center justify-center transition-all duration-150 flex-shrink-0" // Made button square, increased height
             aria-label="Send message"
           >
-            <Send size={20} />
+            <Send size={22} /> {/* Slightly larger icon */}
           </button>
         </form>
-        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 text-center">
-          Press <kbd className="px-1.5 py-0.5 border border-slate-300 dark:border-slate-600 rounded-sm text-xs">Shift</kbd> + <kbd className="px-1.5 py-0.5 border border-slate-300 dark:border-slate-600 rounded-sm text-xs">Enter</kbd> for a new line.
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-2.5 text-center">
+          Press <kbd className="px-1.5 py-0.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-mono bg-slate-50 dark:bg-slate-700">Shift</kbd> + <kbd className="px-1.5 py-0.5 border border-slate-300 dark:border-slate-600 rounded text-xs font-mono bg-slate-50 dark:bg-slate-700">Enter</kbd> for a new line.
         </p>
       </footer>
     </div>
