@@ -159,11 +159,12 @@ pre code.hljs { background: none; }
 #send:hover:not(:disabled) { background: var(--accent-hover); }
 #send:disabled { opacity: 0.6; cursor: not-allowed; }
 
-.streaming {
+.streaming-cursor {
   display: inline-block;
   width: 0.5ch;
   background: currentColor;
   animation: blink 1s step-end infinite;
+  margin-left: 0.1ch;
 }
 
 @keyframes blink { 50% { opacity: 0; } }
