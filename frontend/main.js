@@ -1,133 +1,181 @@
-/* main.js – vanilla ES‑module chat frontend */
-const BACKEND_URL = "/chat";
+/* main.js – vanilla ES module chat frontend */
+const BACKEND_URL = '/chat';
 
-const $ = s => document.querySelector(s);
+const qs = sel => document.querySelector(sel);
 
-const chat   = $("#chat");
-const input  = $("#input");
-const send   = $("#send");
-const tBtn   = $("#themeToggle");
-const tIcon  = $("#themeIcon");
+const chatEl   = qs('#chat');
+const inputEl  = qs('#input');
+const sendBtn  = qs('#send');
+const themeBtn = qs('#themeToggle');
+const themeIcon= qs('#themeIcon');
 
-const THEME_KEY = "ai-chat-theme";
+const THEME_KEY = 'ai-chat-theme';
 initTheme();
 
-/* ───────── helpers ───────── */
-function scrollBottom() { chat.scrollTop = chat.scrollHeight; }
+/* ---------- UI helpers ---------- */
+function scrollBottom(){ chatEl.scrollTop = chatEl.scrollHeight; }
 
-function escape(s) { return s.replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c])); }
-
-function addMsg(html, cls) {
-  const div = document.createElement("div");
+// Modified mkMsg to handle user input as plain text,
+// and rely on CSS for its formatting.
+function mkMsg(text, cls, isHtml = false) {
+  const div = document.createElement('div');
   div.className = `msg ${cls}`;
-  div.innerHTML = cls === "user" ? escape(html) : marked.parse(String(html));
-  chat.appendChild(div);
-  enhanceCode(div);
+
+  if (isHtml) { // Used for AI code blocks which are already HTML structured with <pre><code>
+    div.innerHTML = text;
+  } else if (cls === 'user') {
+    div.textContent = text; // User input is plain text, newlines handled by CSS
+  } else {
+    // For AI messages (sugg, error) that are expected to be Markdown.
+    div.innerHTML = marked.parse(String(text));
+  }
+
+  chatEl.appendChild(div);
+  // Enhance code blocks if any were created by marked.parse or if isHtml contained them
+  // This will primarily affect AI responses.
+  enhanceCodeBlocks(div);
   scrollBottom();
   return div;
 }
 
-function enhanceCode(root) {
-  root.querySelectorAll("pre code").forEach(code => {
-    if (window.hljs) hljs.highlightElement(code);
-    if (!code.parentElement.querySelector(".copy-btn")) {
-      const btn = document.createElement("button");
-      btn.className = "copy-btn";
-      btn.textContent = "Copy";
-      btn.onclick = () => {
-        navigator.clipboard.writeText(code.textContent).then(() => {
-          btn.textContent = "✓";
-          setTimeout(() => (btn.textContent = "Copy"), 1500);
+
+function enhanceCodeBlocks(root){
+  root.querySelectorAll('pre code').forEach(code => {
+    if(window.hljs) hljs.highlightElement(code);
+    // add copy button once
+    if(!code.parentElement.querySelector('.copy-btn')){
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.textContent = 'Copy';
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(code.textContent).then(()=>{
+          btn.textContent = '✓';
+          setTimeout(()=>btn.textContent='Copy',1500);
         });
-      };
+      });
       code.parentElement.appendChild(btn);
     }
   });
 }
 
-/* ───────── theme ───────── */
-function initTheme() {
-  const def = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-  setTheme(localStorage.getItem(THEME_KEY) || def);
-  tBtn.onclick = () => setTheme(document.body.classList.contains("light-theme") ? "dark" : "light");
+function initTheme(){
+  const saved = localStorage.getItem(THEME_KEY) || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  setTheme(saved);
+  themeBtn.addEventListener('click', () => setTheme(document.body.classList.contains('light-theme') ? 'dark' : 'light'));
 }
 
-function setTheme(t) {
-  document.body.classList.toggle("light-theme", t === "light");
-  localStorage.setItem(THEME_KEY, t);
-  tIcon.innerHTML = t === "light"
+function setTheme(theme){
+  document.body.classList.toggle('light-theme', theme === 'light');
+  localStorage.setItem(THEME_KEY, theme);
+  themeIcon.innerHTML = theme === 'light'
     ? '<path d="M5.64 17.656L4.22 19.07 1.634 16.485l1.414-1.414zM12 18a6 6 0 100-12 6 6 0 000 12zm8.364-1.515l1.414 1.414-2.586 2.586-1.414-1.414zM22 13h2v-2h-2zm-10 9h2v2h-2zm9-11h2v-2h-2zM2 13H0v-2h2zm9-11h2V0h-2zm6.364 4.343l1.414-1.414 2.586 2.586-1.414 1.414zM4.22 4.93L5.636 3.515 8.22 6.1 6.806 7.515z"/>'
     : '<path d="M12 4.5a1 1 0 011-1h0a1 1 0 010 2h0a1 1 0 01-1-1zm0 14a1 1 0 011-1h0a1 1 0 010 2h0a1 1 0 01-1-1zm7.5-7.5a1 1 0 011 1v0a1 1 0 01-2 0v0a1 1 0 011-1zM4.5 12a1 1 0 011 1v0a1 1 0 01-2 0v0a1 1 0 011-1zm11.036-6.036a1 1 0 011.414 0v0a1 1 0 11-1.414-1.414v0a1 1 0 010 1.414zM6.05 17.95a1 1 0 011.414 0v0a1 1 0 01-1.414 1.414v0a1 1 0 010-1.414zm12.9 0a1 1 0 011.414 0v0a1 1 0 01-1.414 1.414v0a1 1 0 010-1.414zM6.05 6.05a1 1 0 011.414 0v0a1 1 0 01-1.414-1.414v0a1 1 0 010 1.414z"/>';
 }
 
-/* ───────── chat flow ───────── */
-send.onclick = sendMsg;
-input.addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+/* ---------- Chat flow ---------- */
+sendBtn.addEventListener('click', send);
+inputEl.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
 });
-input.addEventListener("input", () => {
-  input.style.height = "auto";
-  input.style.height = input.scrollHeight + "px";
-});
+inputEl.addEventListener('input', ()=>{ inputEl.style.height='auto'; inputEl.style.height=inputEl.scrollHeight+'px'; });
 
-async function sendMsg() {
-  const text = input.value.trim();
-  if (!text) return;
+async function send(){
+  const text = inputEl.value.trim();
+  if(!text) return;
+  mkMsg(text, 'user'); // User message is plain text, CSS will handle formatting
+  inputEl.value=''; inputEl.style.height='auto';
+  sendBtn.disabled = true;
 
-  addMsg(text, "user");
-  input.value = ""; input.style.height = "auto";
-  send.disabled = true;
+  let generationAgent = '';
+  let generationAccumulatedMd = ''; // Accumulates RAW MARKDOWN for generated code
+  let generationMsgEl = null;
+  let generationContentSpan = null; // The span *inside* the code message where parsed MD goes
 
-  try {
-    const res = await fetch(BACKEND_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ user_message: text })
-    });
-    if (!res.body) throw new Error(res.statusText || "No body");
+  try{
+    const res = await fetch(BACKEND_URL, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ user_message: text }) });
+    if(!res.body) throw new Error(res.statusText || 'No body');
 
-    const rdr = res.body.getReader();
-    const td = new TextDecoder();
-    let buf = "", genName = "", streamDiv, streamTxt = "";
+    let buf='';
+    const reader = res.body.getReader(); const td = new TextDecoder();
 
-    while (true) {
-      const { value, done } = await rdr.read();
-      if (done) break;
-      buf += td.decode(value, { stream: true });
+    while(true){
+      const {value, done}=await reader.read(); if(done) break;
+      buf += td.decode(value, {stream:true});
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
 
-      const lines = buf.split("\n");
-      buf = lines.pop() || "";
+      for(const line of lines){
+        if(!line.trim()) continue;
+        // console.log("Raw line from backend:", line); // DEBUG
+        try {
+          const msg = JSON.parse(line);
+          // console.log("Parsed message:", msg); // DEBUG
+          const type = msg.type;
 
-      for (const ln of lines) {
-        if (!ln.trim()) continue;
-        const m = JSON.parse(ln);
+          if(type==='suggestions'){
+            // Suggestions are Markdown, handled by mkMsg's marked.parse path
+            mkMsg(`**${msg.agent}:**\n\n${msg.content}`, 'sugg');
+          } else if (type==='generated_code_chunk'){
+            if (!generationMsgEl) { // First chunk of generated code for this agent
+              generationAgent = msg.agent;
+              // Initial structure: Agent name (parsed Markdown) + placeholder for code (span) + cursor
+              const initialStructureHtml = marked.parse(`**${generationAgent}:**\n\n`) +
+                                           `<span class="streaming-content"></span>` +
+                                           `<span class="streaming-cursor"></span>`;
+              // Create the message div using isHtml = true
+              generationMsgEl = mkMsg(initialStructureHtml, 'code', true);
+              generationContentSpan = generationMsgEl.querySelector('.streaming-content');
+            }
+            generationAccumulatedMd += msg.content; // Append raw MD chunk
 
-        if (m.type === "suggestions") {
-          addMsg(`**${m.agent}:**\n\n${m.content}`, "sugg");
-        } else if (m.type === "generated_code_chunk") {
-          if (genName !== m.agent) {
-            genName = m.agent;
-            streamTxt = m.content;
-            streamDiv = addMsg(`**${genName}:**\n\n${m.content}<span class="streaming-cursor"></span>`, "code");
-          } else {
-            streamTxt += m.content;
-            streamDiv.innerHTML =
-            marked.parse(`**${genName}:**\n\n${streamTxt}`) +
-            '<span class="streaming-cursor"></span>';
-          
-            enhanceCode(streamDiv);
+            if (generationContentSpan) {
+              // Parse the entire accumulated raw Markdown and put into the span
+              generationContentSpan.innerHTML = marked.parse(generationAccumulatedMd);
+              enhanceCodeBlocks(generationContentSpan); // Re-highlight content within the span
+              const cursor = generationMsgEl.querySelector('.streaming-cursor');
+              if (cursor) generationMsgEl.appendChild(cursor); // Move cursor to end of message div
+            }
+            scrollBottom();
+          } else if (type === 'stream_end') {
+            // Check if this stream_end belongs to the current generation agent
+            if (msg.agent === generationAgent && generationMsgEl) {
+              const cursor = generationMsgEl.querySelector('.streaming-cursor');
+              if (cursor) cursor.remove();
+              // Final parse and enhance for the complete content, just in case
+              if (generationContentSpan && generationAccumulatedMd) {
+                generationContentSpan.innerHTML = marked.parse(generationAccumulatedMd);
+                enhanceCodeBlocks(generationContentSpan);
+              }
+              // Reset for next potential generation
+              generationMsgEl = null;
+              generationContentSpan = null;
+              generationAccumulatedMd = '';
+              generationAgent = '';
+            }
+          } else if (type === 'error') {
+            // Errors are Markdown, handled by mkMsg's marked.parse path
+            mkMsg(`**Error from ${msg.agent}:**\n\n${msg.content}`, 'error');
           }
-          scrollBottom();
-        } else if (m.type === "error") {
-          addMsg(`**Error from ${m.agent}:**\n\n${m.content}`, "error");
+        } catch (e) {
+          console.error("Failed to parse NDJSON line or process message:", line, e);
         }
       }
     }
-    if (streamDiv) streamDiv.querySelector(".streaming-cursor").remove();
-  } catch (err) {
-    addMsg("Client error: " + err.message, "error");
-  } finally {
-    send.disabled = false;
-    input.focus();
+    // Final cleanup of cursor if stream ended abruptly or not via stream_end message
+    if (generationMsgEl) { // If a generation was in progress
+        const cursor = generationMsgEl.querySelector('.streaming-cursor');
+        if (cursor) cursor.remove();
+        // Ensure final content is rendered and enhanced if stream ended without 'stream_end' for this agent
+        if (generationContentSpan && generationAccumulatedMd) {
+            generationContentSpan.innerHTML = marked.parse(generationAccumulatedMd);
+            enhanceCodeBlocks(generationContentSpan);
+        }
+    }
+
+  }catch(err){
+    mkMsg('Client error: '+err.message, 'error'); // Errors are Markdown
+  }finally{
+    sendBtn.disabled = false;
+    inputEl.focus();
   }
 }
