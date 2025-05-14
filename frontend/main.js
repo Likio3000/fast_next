@@ -1,11 +1,10 @@
 /* main.js – vanilla ES module chat frontend (dark‑only) */
 const BACKEND_URL = '/chat';
-
 const qs = sel => document.querySelector(sel);
 
-const chatEl   = qs('#chat');
-const inputEl  = qs('#input');
-const sendBtn  = qs('#send');
+const chatEl  = qs('#chat');
+const inputEl = qs('#input');
+const sendBtn = qs('#send');
 
 /* ---------- UI helpers ---------- */
 function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
@@ -99,10 +98,17 @@ function addRegenerateButton(msgDiv, originalMessage) {
 async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null) {
   sendBtn.disabled = true;
 
-  let generationAgent = '';
-  let generationAccumMd = '';
-  let generationMsgEl = null;
-  let generationContentSpan = null;
+  // streaming state – suggestions
+  let suggAgent = '';
+  let suggAccumMd = '';
+  let suggMsgEl = null;
+  let suggContentSpan = null;
+
+  // streaming state – generated code
+  let genAgent = '';
+  let genAccumMd = '';
+  let genMsgEl = null;
+  let genContentSpan = null;
 
   try {
     const body = { user_message: messageToProcess };
@@ -131,55 +137,95 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
 
       for (const line of lines) {
         if (!line.trim()) continue;
+        let msg;
         try {
-          const msg = JSON.parse(line);
-          const type = msg.type;
-
-          if (type === 'suggestions') {
-            lastSuggestions = { agent: msg.agent, content: msg.content };
-            mkMsg(`**${msg.agent}:**\n\n${msg.content}`, 'sugg');
-          } else if (type === 'generated_code_chunk') {
-            if (!generationMsgEl) {
-              generationAgent = msg.agent;
-              const initialHtml =
-                marked.parse(`**${generationAgent}:**\n\n`) +
-                `<span class="streaming-content"></span>` +
-                `<span class="streaming-cursor"></span>`;
-              generationMsgEl = mkMsg(initialHtml, 'code', true);
-              generationContentSpan =
-                generationMsgEl.querySelector('.streaming-content');
-            }
-            generationAccumMd += msg.content;
-            if (generationContentSpan) {
-              generationContentSpan.innerHTML = marked.parse(generationAccumMd);
-              enhanceCodeBlocks(generationContentSpan);
-              const cursor = generationMsgEl.querySelector('.streaming-cursor');
-              if (cursor) generationMsgEl.appendChild(cursor);
-            }
-            scrollBottom();
-          } else if (type === 'stream_end') {
-            if (msg.agent === generationAgent && generationMsgEl) {
-              const cursor = generationMsgEl.querySelector('.streaming-cursor');
-              if (cursor) cursor.remove();
-              if (generationContentSpan && generationAccumMd) {
-                generationContentSpan.innerHTML = marked.parse(generationAccumMd);
-                enhanceCodeBlocks(generationContentSpan);
-              }
-              generationMsgEl = null;
-              generationContentSpan = null;
-              generationAccumMd = '';
-              generationAgent = '';
-            }
-          } else if (type === 'error') {
-            const errDiv = mkMsg(
-              `**Error from ${msg.agent}:**\n\n${msg.content}`,
-              'error'
-            );
-            addRegenerateButton(errDiv, messageToProcess);
-          }
+          msg = JSON.parse(line);
         } catch (e) {
+          mkMsg('Client‑side JSON parse error.', 'error');
+          continue;
+        }
+
+        const type = msg.type;
+
+        /* ---------- suggestions flow ---------- */
+        if (type === 'suggestions_chunk') {
+          if (!suggMsgEl) {
+            suggAgent = msg.agent;
+            const initialHtml =
+              marked.parse(`**${suggAgent}:**\n\n`) +
+              '<span class="sugg-content"></span><span class="streaming-cursor"></span>';
+            suggMsgEl = mkMsg(initialHtml, 'sugg', true);
+            suggContentSpan = suggMsgEl.querySelector('.sugg-content');
+          }
+          suggAccumMd += msg.content;
+          if (suggContentSpan) {
+            suggContentSpan.innerHTML = marked.parse(suggAccumMd);
+            enhanceCodeBlocks(suggContentSpan);
+            const cursor = suggMsgEl.querySelector('.streaming-cursor');
+            if (cursor) suggMsgEl.appendChild(cursor);
+          }
+          scrollBottom();
+          continue;
+        }
+
+        if (type === 'suggestions_end') {
+          if (msg.agent === suggAgent && suggMsgEl) {
+            const cursor = suggMsgEl.querySelector('.streaming-cursor');
+            if (cursor) cursor.remove();
+            if (suggContentSpan && suggAccumMd) {
+              suggContentSpan.innerHTML = marked.parse(suggAccumMd);
+              enhanceCodeBlocks(suggContentSpan);
+            }
+            lastSuggestions = { agent: suggAgent, content: suggAccumMd };
+            suggAgent = '';
+            suggAccumMd = '';
+            suggMsgEl = null;
+            suggContentSpan = null;
+          }
+          continue;
+        }
+
+        /* ---------- generated code flow ---------- */
+        if (type === 'generated_code_chunk') {
+          if (!genMsgEl) {
+            genAgent = msg.agent;
+            const initialHtml =
+              marked.parse(`**${genAgent}:**\n\n`) +
+              '<span class="gen-content"></span><span class="streaming-cursor"></span>';
+            genMsgEl = mkMsg(initialHtml, 'code', true);
+            genContentSpan = genMsgEl.querySelector('.gen-content');
+          }
+          genAccumMd += msg.content;
+          if (genContentSpan) {
+            genContentSpan.innerHTML = marked.parse(genAccumMd);
+            enhanceCodeBlocks(genContentSpan);
+            const cursor = genMsgEl.querySelector('.streaming-cursor');
+            if (cursor) genMsgEl.appendChild(cursor);
+          }
+          scrollBottom();
+          continue;
+        }
+
+        if (type === 'stream_end') {
+          if (msg.agent === genAgent && genMsgEl) {
+            const cursor = genMsgEl.querySelector('.streaming-cursor');
+            if (cursor) cursor.remove();
+            if (genContentSpan && genAccumMd) {
+              genContentSpan.innerHTML = marked.parse(genAccumMd);
+              enhanceCodeBlocks(genContentSpan);
+            }
+            genAgent = '';
+            genAccumMd = '';
+            genMsgEl = null;
+            genContentSpan = null;
+          }
+          continue;
+        }
+
+        /* ---------- error ---------- */
+        if (type === 'error') {
           const errDiv = mkMsg(
-            `Client-side error parsing stream data.\n\n\`${line}\`\n\n${e.message}`,
+            `**Error from ${msg.agent}:**\n\n${msg.content}`,
             'error'
           );
           addRegenerateButton(errDiv, messageToProcess);
@@ -187,14 +233,23 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
       }
     }
 
-    // flush if stream ended abruptly
-    if (generationMsgEl) {
-      const cursor = generationMsgEl.querySelector('.streaming-cursor');
+    /* flush hanging cursors if stream ended abruptly */
+    if (genMsgEl) {
+      const cursor = genMsgEl.querySelector('.streaming-cursor');
       if (cursor) cursor.remove();
-      if (generationContentSpan && generationAccumMd) {
-        generationContentSpan.innerHTML = marked.parse(generationAccumMd);
-        enhanceCodeBlocks(generationContentSpan);
+      if (genContentSpan && genAccumMd) {
+        genContentSpan.innerHTML = marked.parse(genAccumMd);
+        enhanceCodeBlocks(genContentSpan);
       }
+    }
+    if (suggMsgEl) {
+      const cursor = suggMsgEl.querySelector('.streaming-cursor');
+      if (cursor) cursor.remove();
+      if (suggContentSpan && suggAccumMd) {
+        suggContentSpan.innerHTML = marked.parse(suggAccumMd);
+        enhanceCodeBlocks(suggContentSpan);
+      }
+      lastSuggestions = { agent: suggAgent, content: suggAccumMd };
     }
   } catch (err) {
     const errDiv = mkMsg('Client error: ' + err.message, 'error');

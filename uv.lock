@@ -119,6 +119,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "google-generativeai" },
+    { name = "openai" },
     { name = "openai-agents" },
     { name = "pyperclip" },
     { name = "python-dotenv" },
@@ -129,6 +130,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115.12" },
     { name = "google-generativeai", specifier = ">=0.8.5" },
+    { name = "openai", specifier = ">=1.76.2" },
     { name = "openai-agents", specifier = ">=0.0.14" },
     { name = "pyperclip", specifier = ">=1.9.0" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
