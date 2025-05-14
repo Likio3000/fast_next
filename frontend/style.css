@@ -206,3 +206,47 @@ pre > .copy-btn { /* This selector is more specific for buttons inside <pre> */
 @media (max-width: 600px) {
   .app { border-radius: 0; height: 100vh; }
 }
+
+/* Message Actions (e.g., for Regenerate button) */
+.msg-actions {
+  margin-top: 10px; /* Space above the action button(s) */
+  padding-top: 10px; /* Space between separator and button */
+  border-top: 1px solid color-mix(in srgb, var(--fg) 20%, transparent); /* Subtle separator, slightly lighter than border for error msg */
+  text-align: right; /* Align button(s) to the right */
+}
+/* For error messages, make the separator slightly more visible against error background */
+.msg.error .msg-actions {
+    border-top: 1px solid color-mix(in srgb, var(--error-fg) 30%, transparent);
+}
+
+
+.action-btn {
+  font-size: 0.85em;
+  padding: 0.4em 0.8em;
+  background-color: var(--bg-alt); /* Or var(--bg) if --bg-alt is message bg */
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.msg.error .action-btn { /* Style for buttons inside error messages specifically */
+    background-color: color-mix(in srgb, var(--error-bg) 80%, #000); /* Darker shade of error bg */
+    color: var(--error-fg);
+    border: 1px solid color-mix(in srgb, var(--error-fg) 50%, transparent);
+}
+
+
+.action-btn:hover:not(:disabled) {
+  background-color: var(--accent);
+  color: #fff; /* White text on accent color */
+  border-color: var(--accent);
+}
+
+.msg.error .action-btn:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--error-bg) 60%, #000);
+    border-color: var(--error-fg);
+}
+
+.action-btn:disabled { opacity: 0.6; cursor: not-allowed; }

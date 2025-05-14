@@ -9,40 +9,30 @@ const sendBtn  = qs('#send');
 const themeBtn = qs('#themeToggle');
 const themeIcon= qs('#themeIcon');
 
-const THEME_KEY = 'ai-chat-theme';
-initTheme();
-
 /* ---------- UI helpers ---------- */
 function scrollBottom(){ chatEl.scrollTop = chatEl.scrollHeight; }
 
-// Modified mkMsg to handle user input as plain text,
-// and rely on CSS for its formatting.
 function mkMsg(text, cls, isHtml = false) {
   const div = document.createElement('div');
   div.className = `msg ${cls}`;
 
-  if (isHtml) { // Used for AI code blocks which are already HTML structured with <pre><code>
+  if (isHtml) {
     div.innerHTML = text;
   } else if (cls === 'user') {
-    div.textContent = text; // User input is plain text, newlines handled by CSS
+    div.textContent = text;
   } else {
-    // For AI messages (sugg, error) that are expected to be Markdown.
     div.innerHTML = marked.parse(String(text));
   }
 
   chatEl.appendChild(div);
-  // Enhance code blocks if any were created by marked.parse or if isHtml contained them
-  // This will primarily affect AI responses.
   enhanceCodeBlocks(div);
   scrollBottom();
   return div;
 }
 
-
 function enhanceCodeBlocks(root){
   root.querySelectorAll('pre code').forEach(code => {
     if(window.hljs) hljs.highlightElement(code);
-    // add copy button once
     if(!code.parentElement.querySelector('.copy-btn')){
       const btn = document.createElement('button');
       btn.className = 'copy-btn';
@@ -57,6 +47,9 @@ function enhanceCodeBlocks(root){
     }
   });
 }
+
+const THEME_KEY = 'ai-chat-theme';
+initTheme();
 
 function initTheme(){
   const saved = localStorage.getItem(THEME_KEY) || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
@@ -73,30 +66,71 @@ function setTheme(theme){
 }
 
 /* ---------- Chat flow ---------- */
-sendBtn.addEventListener('click', send);
+let lastSuggestions = null; // {agent, content}
+
+sendBtn.addEventListener('click', handleSend);
 inputEl.addEventListener('keydown', e=>{
-  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
 });
 inputEl.addEventListener('input', ()=>{ inputEl.style.height='auto'; inputEl.style.height=inputEl.scrollHeight+'px'; });
 
-async function send(){
+async function handleSend(){
   const text = inputEl.value.trim();
   if(!text) return;
-  mkMsg(text, 'user'); // User message is plain text, CSS will handle formatting
+
+  mkMsg(text, 'user');
   inputEl.value=''; inputEl.style.height='auto';
+
+  await initiateFetchAndStream(text);
+}
+
+function addRegenerateButton(msgDiv, originalMessage){
+  if (msgDiv.querySelector('.regenerate-btn')) return;
+
+  const container = document.createElement('div');
+  container.className = 'msg-actions';
+
+  const btn = document.createElement('button');
+  btn.className = 'regenerate-btn action-btn';
+  btn.textContent = 'Regenerate';
+
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = 'Regenerating…';
+    try {
+      await initiateFetchAndStream(originalMessage, lastSuggestions);
+    } finally {
+      msgDiv.remove();
+    }
+  };
+
+  container.appendChild(btn);
+  msgDiv.appendChild(container);
+}
+
+async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null){
   sendBtn.disabled = true;
 
   let generationAgent = '';
-  let generationAccumulatedMd = ''; // Accumulates RAW MARKDOWN for generated code
+  let generationAccumMd = '';
   let generationMsgEl = null;
-  let generationContentSpan = null; // The span *inside* the code message where parsed MD goes
+  let generationContentSpan = null;
 
   try{
-    const res = await fetch(BACKEND_URL, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ user_message: text }) });
+    const body = { user_message: messageToProcess };
+    if(cachedSuggestion){
+      body.cached_suggestions = cachedSuggestion.content;
+      body.cached_sugg_agent  = cachedSuggestion.agent;
+    }
+
+    const res = await fetch(BACKEND_URL, {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body: JSON.stringify(body)
+    });
     if(!res.body) throw new Error(res.statusText || 'No body');
 
-    let buf='';
-    const reader = res.body.getReader(); const td = new TextDecoder();
+    let buf=''; const reader = res.body.getReader(); const td = new TextDecoder();
 
     while(true){
       const {value, done}=await reader.read(); if(done) break;
@@ -106,74 +140,63 @@ async function send(){
 
       for(const line of lines){
         if(!line.trim()) continue;
-        // console.log("Raw line from backend:", line); // DEBUG
-        try {
+        try{
           const msg = JSON.parse(line);
-          // console.log("Parsed message:", msg); // DEBUG
           const type = msg.type;
 
           if(type==='suggestions'){
-            // Suggestions are Markdown, handled by mkMsg's marked.parse path
+            lastSuggestions = {agent: msg.agent, content: msg.content};
             mkMsg(`**${msg.agent}:**\n\n${msg.content}`, 'sugg');
-          } else if (type==='generated_code_chunk'){
-            if (!generationMsgEl) { // First chunk of generated code for this agent
+          }else if(type==='generated_code_chunk'){
+            if (!generationMsgEl){
               generationAgent = msg.agent;
-              // Initial structure: Agent name (parsed Markdown) + placeholder for code (span) + cursor
-              const initialStructureHtml = marked.parse(`**${generationAgent}:**\n\n`) +
-                                           `<span class="streaming-content"></span>` +
-                                           `<span class="streaming-cursor"></span>`;
-              // Create the message div using isHtml = true
-              generationMsgEl = mkMsg(initialStructureHtml, 'code', true);
+              const initialHtml = marked.parse(`**${generationAgent}:**\n\n`) +
+                                  `<span class="streaming-content"></span>` +
+                                  `<span class="streaming-cursor"></span>`;
+              generationMsgEl = mkMsg(initialHtml, 'code', true);
               generationContentSpan = generationMsgEl.querySelector('.streaming-content');
             }
-            generationAccumulatedMd += msg.content; // Append raw MD chunk
-
-            if (generationContentSpan) {
-              // Parse the entire accumulated raw Markdown and put into the span
-              generationContentSpan.innerHTML = marked.parse(generationAccumulatedMd);
-              enhanceCodeBlocks(generationContentSpan); // Re-highlight content within the span
+            generationAccumMd += msg.content;
+            if(generationContentSpan){
+              generationContentSpan.innerHTML = marked.parse(generationAccumMd);
+              enhanceCodeBlocks(generationContentSpan);
               const cursor = generationMsgEl.querySelector('.streaming-cursor');
-              if (cursor) generationMsgEl.appendChild(cursor); // Move cursor to end of message div
+              if(cursor) generationMsgEl.appendChild(cursor);
             }
             scrollBottom();
-          } else if (type === 'stream_end') {
-            // Check if this stream_end belongs to the current generation agent
-            if (msg.agent === generationAgent && generationMsgEl) {
+          }else if(type==='stream_end'){
+            if(msg.agent === generationAgent && generationMsgEl){
               const cursor = generationMsgEl.querySelector('.streaming-cursor');
-              if (cursor) cursor.remove();
-              // Final parse and enhance for the complete content, just in case
-              if (generationContentSpan && generationAccumulatedMd) {
-                generationContentSpan.innerHTML = marked.parse(generationAccumulatedMd);
+              if(cursor) cursor.remove();
+              if(generationContentSpan && generationAccumMd){
+                generationContentSpan.innerHTML = marked.parse(generationAccumMd);
                 enhanceCodeBlocks(generationContentSpan);
               }
-              // Reset for next potential generation
-              generationMsgEl = null;
-              generationContentSpan = null;
-              generationAccumulatedMd = '';
-              generationAgent = '';
+              generationMsgEl=null; generationContentSpan=null; generationAccumMd=''; generationAgent='';
             }
-          } else if (type === 'error') {
-            // Errors are Markdown, handled by mkMsg's marked.parse path
-            mkMsg(`**Error from ${msg.agent}:**\n\n${msg.content}`, 'error');
+          }else if(type==='error'){
+            const errDiv = mkMsg(`**Error from ${msg.agent}:**\n\n${msg.content}`, 'error');
+            addRegenerateButton(errDiv, messageToProcess);
           }
-        } catch (e) {
-          console.error("Failed to parse NDJSON line or process message:", line, e);
+        }catch(e){
+          const errDiv = mkMsg(`Client-side error parsing stream data.\n\n\`${line}\`\n\n${e.message}`, 'error');
+          addRegenerateButton(errDiv, messageToProcess);
         }
       }
     }
-    // Final cleanup of cursor if stream ended abruptly or not via stream_end message
-    if (generationMsgEl) { // If a generation was in progress
-        const cursor = generationMsgEl.querySelector('.streaming-cursor');
-        if (cursor) cursor.remove();
-        // Ensure final content is rendered and enhanced if stream ended without 'stream_end' for this agent
-        if (generationContentSpan && generationAccumulatedMd) {
-            generationContentSpan.innerHTML = marked.parse(generationAccumulatedMd);
-            enhanceCodeBlocks(generationContentSpan);
-        }
+
+    if(generationMsgEl){
+      const cursor = generationMsgEl.querySelector('.streaming-cursor');
+      if(cursor) cursor.remove();
+      if(generationContentSpan && generationAccumMd){
+        generationContentSpan.innerHTML = marked.parse(generationAccumMd);
+        enhanceCodeBlocks(generationContentSpan);
+      }
     }
 
   }catch(err){
-    mkMsg('Client error: '+err.message, 'error'); // Errors are Markdown
+    const errDiv = mkMsg('Client error: '+err.message, 'error');
+    addRegenerateButton(errDiv, messageToProcess);
   }finally{
     sendBtn.disabled = false;
     inputEl.focus();
