@@ -1,47 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Code Assistant</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Code Assistant</title>
 
-  <link rel="stylesheet" href="style.css" />
-  <!-- Highlight.js theme (no integrity attribute → avoids digest mismatch) -->
-  <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-</head>
-<body>
-  <img src="LIKIO_FLOW.png" alt="LIKIO FLOW Logo" id="sideLogo" />
+    <link rel="stylesheet" href="style.css" />
+    <!-- Highlight.js dark theme -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
+    />
+  </head>
 
-  <div class="app">
-    <header class="app-header">
-      <h1 class="app-title">LIKIO</h1>
-      <button id="themeToggle" class="icon-btn" aria-label="Toggle theme">
-        <svg id="themeIcon" xmlns="http://www.w3.org/2000/svg"
-             viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-          <path d="M12 18a6 6 0 110-12 6 6 0 010 12z"/>
-        </svg>
-      </button>
-    </header>
+  <body>
+    <!-- logo lateral -->
+    <img src="LIKIO_FLOW.png" alt="LIKIO FLOW Logo" id="sideLogo" />
 
-    <main id="chat" class="chat" aria-live="polite"></main>
+    <div class="app">
+      <header class="app-header">
+        <h1 class="app-title"></h1>
+        <!--  🔥  BOTÓN DE TEMA ELIMINADO  🔥 -->
+      </header>
 
-    <footer class="app-footer">
-      <textarea id="input" placeholder="Paste code or ask… (Shift+Enter = newline)"></textarea>
-      <button id="send" class="icon-btn" aria-label="Send">
-        <svg xmlns="http://www.w3.org/2000/svg"
-             viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-          <path d="M3.4 2.4a.8.8 0 00-.99.99l2.61 8.48H14a.8.8 0 010 1.6H5.02l-2.61 8.49a.8.8 0 00.99.99
-                   64.53 64.53 0 0019.64-9.56.8.8 0 000-1.3A64.52 64.52 0 003.4 2.4z"/>
-        </svg>
-      </button>
-    </footer>
-  </div>
+      <main id="chat" class="chat" aria-live="polite"></main>
 
-  <img src="cat_gato.png" alt="A friendly cat illustration" id="sideIllustration" />
+      <footer class="app-footer">
+        <textarea
+          id="input"
+          placeholder="Paste code or ask… (Shift+Enter = newline)"
+        ></textarea>
+        <button id="send" class="icon-btn" aria-label="Send">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="24"
+            height="24"
+            fill="currentColor"
+          >
+            <path
+              d="M3.4 2.4a.8.8 0 00-.99.99l2.61 8.48H14a.8.8 0 010 1.6H5.02l-2.61 8.49a.8.8 0 00.99.99
+                   64.53 64.53 0 0019.64-9.56.8.8 0 000-1.3A64.52 64.52 0 003.4 2.4z"
+            />
+          </svg>
+        </button>
+      </footer>
+    </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script type="module" src="main.js"></script>
-</body>
+    <!-- ilustración lateral -->
+    <img
+      src="cat_gato.png"
+      alt="A friendly cat illustration"
+      id="sideIllustration"
+    />
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
 </html>

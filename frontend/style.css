@@ -2,25 +2,12 @@
   --bg: #0d1117;
   --bg-alt: #161b22;
   --fg: #c9d1d9;
-  --accent:rgb(100, 218, 85);
+  --accent: rgb(100, 218, 85);
   --user-message-background: #2978C8;
   --accent-hover: #1f6feb;
   --border: #30363d;
-  --code-bg: #161b22; /* Used for AI code blocks */
+  --code-bg: #161b22; /* AI code blocks */
   --error-bg: #ff5555;
-  --error-fg: #ffffff;
-}
-
-.light-theme {
-  --bg: #ffffff;
-  --bg-alt: #f6f8fa;
-  --fg: #24292f;
-  --accent: #0969da;
-  --user-message-background: #0969da;
-  --accent-hover: #054da4;
-  --border: #d0d7de;
-  --code-bg: #f6f8fa; /* Used for AI code blocks */
-  --error-bg: #d32f2f;
   --error-fg: #ffffff;
 }
 
@@ -28,14 +15,15 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
   background: var(--bg);
   color: var(--fg);
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  overflow-x: hidden; /* Prevent horizontal scroll if side images are too wide before media query kicks in */
+  overflow-x: hidden;
 }
 
 .app {
