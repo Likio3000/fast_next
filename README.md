@@ -116,3 +116,6 @@ You can also use the following options:
 *   `-w` or `--write`: Write the output to a file.
 *   `-t` or `--tests`: Include the `tests/` directory.
 *   `-v` or `--verbose`: Print every included file to the console.
+## License
+
+This project is licensed under the [MIT License](LICENSE).
