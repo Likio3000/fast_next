@@ -67,10 +67,10 @@ These instructions will get you a copy of the project up and running on your loc
       ```bash
       pip install -r requirements.txt
       ```
-    *   Create a `.env` file in the `backend` directory and add your API keys:
-      ```
-      OPENAI_API_KEY="your_openai_api_key"
-      GEMINI_API_KEY="your_gemini_api_key"
+    *   Copy `.env.example` to `.env` and edit it with your API keys and desired settings:
+      ```bash
+      cp .env.example .env
+      # then open .env and update the values
       ```
 
 3.  **Run the application:**

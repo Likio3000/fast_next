@@ -29,6 +29,7 @@ backend/.venv/
 # Environment variables
 .env
 .env.*
+!.env.example
 backend/.env
 
 # Testing & Coverage
