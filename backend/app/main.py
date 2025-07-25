@@ -3,7 +3,7 @@ import os, json, asyncio, logging
 from pathlib import Path
 from typing import AsyncGenerator, Tuple, Dict, Any
 
-from openai import AsyncOpenAI             # ← new
+from openai import AsyncOpenAI
 import google.generativeai as genai
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,7 +46,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_AVAILABLE = bool(OPENAI_API_KEY)
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)  # works even if None
 
-OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-nano-2025-04-14")
+OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "o4-mini-2025-04-16")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
@@ -60,7 +60,14 @@ else:
     GENAI_AVAILABLE = False
     logger.warning("GEMINI_API_KEY not set – Gemini features disabled.")
 
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-pro")
+
+# Fail fast if no providers are configured
+if not OPENAI_AVAILABLE and not GENAI_AVAILABLE:
+    raise RuntimeError(
+        "Neither OpenAI nor Gemini is configured. "
+        "Please set at least one of OPENAI_API_KEY or GEMINI_API_KEY."
+    )
 
 GENERATION_PROVIDER = os.getenv("GENERATION_PROVIDER", "gemini").lower()
 SUGGESTION_PROVIDER = os.getenv("SUGGESTION_PROVIDER", "openai").lower()
@@ -74,6 +81,7 @@ for vname, vval in [
             GENERATION_PROVIDER = "openai"
         else:
             SUGGESTION_PROVIDER = "openai"
+
 
 # ─────────── SuggestionService ───────────
 class SuggestionService:
@@ -114,8 +122,8 @@ class SuggestionService:
                 return await self._suggest_openai_batch(code)
             else:
                 return await self._suggest_gemini_batch(code)
-        except Exception as e:
-            logger.warning("Suggestion provider error: %s", e)
+        except Exception:
+            logger.exception("Suggestion provider error")
         return (
             "MockedSuggestions",
             "• Split very large functions.\n• Add doc-strings.\n• Introduce type hints.",
@@ -125,7 +133,13 @@ class SuggestionService:
     async def _stream_openai(self, code: str) -> AsyncGenerator[Dict[str, Any], None]:
         agent = self.openai_model
         if not OPENAI_AVAILABLE:
-            logger.warning("OpenAI unavailable – skipping stream")
+            logger.warning("OpenAI unavailable - yielding error event.")
+            yield {
+                "event": "error",
+                "agent": agent,
+                "delta": "OpenAI features are disabled on the server.",
+            }
+            yield {"event": "end", "agent": agent}
             return
         try:
             stream = await openai_client.chat.completions.create(
@@ -137,29 +151,44 @@ class SuggestionService:
                 stream=True,
             )
         except Exception as e:
-            logger.exception("OpenAI suggestion stream failed – %s", e)
+            logger.exception("OpenAI suggestion stream failed")
+            yield {"event": "error", "agent": agent, "delta": str(e)}
+            yield {"event": "end", "agent": agent}
             return
 
         async for chunk in stream:
             delta = chunk.choices[0].delta.content or ""
             if delta:
                 yield {"event": "chunk", "agent": agent, "delta": delta}
-                await asyncio.sleep(0)
         yield {"event": "end", "agent": agent}
 
     async def _stream_gemini(self, code: str) -> AsyncGenerator[Dict[str, Any], None]:
         agent = self.gemini_model
         if not GENAI_AVAILABLE:
+            logger.warning("Gemini unavailable - yielding error event.")
+            yield {
+                "event": "error",
+                "agent": agent,
+                "delta": "Gemini features are disabled on the server.",
+            }
+            yield {"event": "end", "agent": agent}
             return
-        model = genai.GenerativeModel(agent)
-        stream = await model.generate_content_async(
-            f"{SUGGESTION_PROMPT}\n\n```python\n{code}\n```", stream=True
-        )
+
+        try:
+            model = genai.GenerativeModel(agent)
+            stream = await model.generate_content_async(
+                f"{SUGGESTION_PROMPT}\n\n```python\n{code}\n```", stream=True
+            )
+        except Exception as e:
+            logger.exception("Gemini suggestion stream failed")
+            yield {"event": "error", "agent": agent, "delta": str(e)}
+            yield {"event": "end", "agent": agent}
+            return
+
         async for chunk in stream:
             delta = getattr(chunk, "text", "")
             if delta:
                 yield {"event": "chunk", "agent": agent, "delta": delta}
-                await asyncio.sleep(0)
         yield {"event": "end", "agent": agent}
 
     async def stream_suggestions(
@@ -182,6 +211,13 @@ class GenerationService:
         self.gemini_model = gemini_model
         self.openai_model = openai_model
 
+    def _make_event(self, type: str, agent: str, content: str | None = None) -> str:
+        """Helper to construct a JSON event string."""
+        event_data = {"type": type, "agent": agent}
+        if content is not None:
+            event_data["content"] = content
+        return json.dumps(event_data) + "\n"
+
     async def stream_generated_code(
         self, user_code: str, suggestions: str, sugg_agent: str
     ) -> AsyncGenerator[str, None]:
@@ -197,10 +233,8 @@ class GenerationService:
         self, user_code: str, suggestions: str, sugg_agent: str
     ) -> AsyncGenerator[str, None]:
         if not OPENAI_AVAILABLE:
-            yield json.dumps(
-                {"type": "error", "agent": "OpenAI", "content": "OpenAI disabled."}
-            ) + "\n"
-            yield json.dumps({"type": "stream_end", "agent": "OpenAI"}) + "\n"
+            yield self._make_event("error", "OpenAI", "OpenAI disabled.")
+            yield self._make_event("stream_end", "OpenAI")
             return
 
         messages = [
@@ -216,42 +250,27 @@ class GenerationService:
 
         try:
             stream = await openai_client.chat.completions.create(
-                model=self.openai_model,
-                messages=messages,
-                stream=True,
+                model=self.openai_model, messages=messages, stream=True
             )
             async for chunk in stream:
                 delta = chunk.choices[0].delta.content or ""
                 if delta:
-                    yield json.dumps(
-                        {
-                            "type": "generated_code_chunk",
-                            "agent": self.openai_model,
-                            "content": delta,
-                        }
-                    ) + "\n"
-                await asyncio.sleep(0)
-            yield json.dumps(
-                {"type": "stream_end", "agent": self.openai_model}
-            ) + "\n"
+                    yield self._make_event(
+                        "generated_code_chunk", self.openai_model, delta
+                    )
+            yield self._make_event("stream_end", self.openai_model)
         except Exception as e:
-            logger.exception("OpenAI generation failed – %s", e)
-            yield json.dumps(
-                {"type": "error", "agent": self.openai_model, "content": str(e)}
-            ) + "\n"
-            yield json.dumps(
-                {"type": "stream_end", "agent": self.openai_model}
-            ) + "\n"
+            logger.exception("OpenAI generation failed")
+            yield self._make_event("error", self.openai_model, str(e))
+            yield self._make_event("stream_end", self.openai_model)
 
     # ----- Gemini path ----------------------------------------------------
     async def _stream_gemini(
         self, user_code: str, suggestions: str, sugg_agent: str
     ) -> AsyncGenerator[str, None]:
         if not GENAI_AVAILABLE:
-            yield json.dumps(
-                {"type": "error", "agent": "Gemini", "content": "Gemini disabled."}
-            ) + "\n"
-            yield json.dumps({"type": "stream_end", "agent": "Gemini"}) + "\n"
+            yield self._make_event("error", "Gemini", "Gemini disabled.")
+            yield self._make_event("stream_end", "Gemini")
             return
 
         prompt = f"""
@@ -266,27 +285,20 @@ class GenerationService:
 </suggestions>
 """.strip()
 
-        model = genai.GenerativeModel(self.gemini_model)
         try:
+            model = genai.GenerativeModel(self.gemini_model)
             stream = await model.generate_content_async(prompt, stream=True)
             async for chunk in stream:
                 delta = getattr(chunk, "text", "")
                 if delta:
-                    yield json.dumps(
-                        {
-                            "type": "generated_code_chunk",
-                            "agent": self.gemini_model,
-                            "content": delta,
-                        }
-                    ) + "\n"
-                await asyncio.sleep(0)
-            yield json.dumps({"type": "stream_end", "agent": self.gemini_model}) + "\n"
+                    yield self._make_event(
+                        "generated_code_chunk", self.gemini_model, delta
+                    )
+            yield self._make_event("stream_end", self.gemini_model)
         except Exception as e:
-            logger.exception("Gemini generation failed – %s", e)
-            yield json.dumps(
-                {"type": "error", "agent": self.gemini_model, "content": str(e)}
-            ) + "\n"
-            yield json.dumps({"type": "stream_end", "agent": self.gemini_model}) + "\n"
+            logger.exception("Gemini generation failed")
+            yield self._make_event("error", self.gemini_model, str(e))
+            yield self._make_event("stream_end", self.gemini_model)
 
 
 # ─────────── FastAPI wiring ───────────
@@ -343,6 +355,7 @@ async def chat(req: ChatRequest):
 
     async def full_stream():
         sugg_accum, sugg_agent = [], None
+        had_sugg_error = False
 
         # 1️⃣ suggestions (live)
         async for rec in suggestions_svc.stream_suggestions(req.user_message):
@@ -356,8 +369,17 @@ async def chat(req: ChatRequest):
                         "content": rec["delta"],
                     }
                 ) + "\n"
+            elif rec["event"] == "error":
+                had_sugg_error = True
+                yield json.dumps(
+                    {"type": "error", "agent": rec["agent"], "content": rec["delta"]}
+                ) + "\n"
             elif rec["event"] == "end":
                 yield json.dumps({"type": "suggestions_end", "agent": rec["agent"]}) + "\n"
+
+        if had_sugg_error:
+            logger.warning("Skipping code generation due to suggestion failure.")
+            return
 
         suggestions_text = "".join(sugg_accum)
 
