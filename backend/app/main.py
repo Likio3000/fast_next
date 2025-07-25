@@ -33,14 +33,6 @@ GENERATION_SYSTEM_PROMPT = (
     "*No commentary outside the code-fences.*"
 )
 
-# ─────────── Optional legacy “agents” dep ───────────
-try:
-    from agents import Agent, Runner  # type: ignore
-    AGENTS_AVAILABLE = True
-except ImportError:
-    AGENTS_AVAILABLE = False
-    logger.info("'agents' module not found – legacy path disabled.")
-
 # ─────────── Provider config ───────────
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_AVAILABLE = bool(OPENAI_API_KEY)
