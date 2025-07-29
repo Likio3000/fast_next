@@ -38,7 +38,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_AVAILABLE = bool(OPENAI_API_KEY)
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)  # works even if None
 
-OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "o4-mini-2025-04-16")
+OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-nano-2025-04-14") #for testing: gpt-4.1-nano-2025-04-14 ; for user usage: o4-mini-2025-04-16
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:

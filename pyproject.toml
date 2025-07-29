@@ -1,3 +1,14 @@
+[project]
+name = "sc2-script-runner"
+version = "0.1.0"
+dependencies = [
+    "pyperclip",
+    "pathspec",
+]
+
+[tool.uv.scripts]
+sc2 = "python sc2.py"
+
 [tool.poetry]
 name = "fast-next"
 version = "0.1.0"
