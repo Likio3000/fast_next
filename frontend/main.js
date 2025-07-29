@@ -9,6 +9,30 @@ const sendBtn = qs('#send');
 /* ---------- UI helpers ---------- */
 function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
 
+/**
+ * Creates and shows a loader message.
+ * @param {string} id - A unique ID for the loader element.
+ * @param {string} text - The text to display next to the animation.
+ */
+function showLoader(id, text) {
+  hideLoader(id); // Ensure no duplicates
+  const div = document.createElement('div');
+  div.className = 'msg loader';
+  div.id = id;
+  div.innerHTML = `\n    <div class="loading-dots"><span></span><span></span><span></span></div>\n    <span>${text}</span>`;
+  chatEl.appendChild(div);
+  scrollBottom();
+}
+
+/**
+ * Removes a loader message by its ID.
+ * @param {string} id - The ID of the loader element to remove.
+ */
+function hideLoader(id) {
+  const loader = qs(`#${id}`);
+  if (loader) loader.remove();
+}
+
 function mkMsg(text, cls, isHtml = false) {
   const div = document.createElement('div');
   div.className = `msg ${cls}`;
@@ -68,6 +92,8 @@ async function handleSend() {
   inputEl.value = '';
   inputEl.style.height = 'auto';
 
+  lastSuggestions = null; // Reset suggestions for a new query
+  showLoader('initial-loader', 'Thinking...');
   await initiateFetchAndStream(text);
 }
 
@@ -84,6 +110,7 @@ function addRegenerateButton(msgDiv, originalMessage) {
   btn.onclick = async () => {
     btn.disabled = true;
     btn.textContent = 'Regenerating…';
+    showLoader('initial-loader', 'Regenerating...');
     try {
       await initiateFetchAndStream(originalMessage, lastSuggestions);
     } finally {
@@ -109,6 +136,8 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
   let genAccumMd = '';
   let genMsgEl = null;
   let genContentSpan = null;
+
+  let initialLoaderHidden = false;
 
   try {
     const body = { user_message: messageToProcess };
@@ -145,6 +174,12 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
           continue;
         }
 
+        // Hide initial loader as soon as the first content chunk arrives.
+        if (!initialLoaderHidden && (msg.type === 'suggestions_chunk' || msg.type === 'generated_code_chunk')) {
+          hideLoader('initial-loader');
+          initialLoaderHidden = true;
+        }
+
         const type = msg.type;
 
         /* ---------- suggestions flow ---------- */
@@ -177,16 +212,20 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
               enhanceCodeBlocks(suggContentSpan);
             }
             lastSuggestions = { agent: suggAgent, content: suggAccumMd };
+            addRegenerateButton(suggMsgEl, messageToProcess); // Add regenerate to suggestions
             suggAgent = '';
             suggAccumMd = '';
             suggMsgEl = null;
             suggContentSpan = null;
           }
+          // Show loader for the generation phase
+          showLoader('generation-loader', 'Generating implementation...');
           continue;
         }
 
         /* ---------- generated code flow ---------- */
         if (type === 'generated_code_chunk') {
+          hideLoader('generation-loader'); // Hide loader when code starts
           if (!genMsgEl) {
             genAgent = msg.agent;
             const initialHtml =
@@ -214,6 +253,7 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
               genContentSpan.innerHTML = marked.parse(genAccumMd);
               enhanceCodeBlocks(genContentSpan);
             }
+            addRegenerateButton(genMsgEl, messageToProcess);
             genAgent = '';
             genAccumMd = '';
             genMsgEl = null;
@@ -240,6 +280,7 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
       if (genContentSpan && genAccumMd) {
         genContentSpan.innerHTML = marked.parse(genAccumMd);
         enhanceCodeBlocks(genContentSpan);
+        addRegenerateButton(genMsgEl, messageToProcess);
       }
     }
     if (suggMsgEl) {
@@ -250,11 +291,15 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
         enhanceCodeBlocks(suggContentSpan);
       }
       lastSuggestions = { agent: suggAgent, content: suggAccumMd };
+      addRegenerateButton(suggMsgEl, messageToProcess);
     }
   } catch (err) {
     const errDiv = mkMsg('Client error: ' + err.message, 'error');
     addRegenerateButton(errDiv, messageToProcess);
   } finally {
+    // Cleanup any loaders that might be left over
+    hideLoader('initial-loader');
+    hideLoader('generation-loader');
     sendBtn.disabled = false;
     inputEl.focus();
   }
