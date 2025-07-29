@@ -48,7 +48,7 @@ These instructions will get you a copy of the project up and running on your loc
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://your-repository-url.com/
+    git clone https://github.com/Likio3000/fast_next.git
     cd your-repository-directory
     ```
 
