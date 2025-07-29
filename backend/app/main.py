@@ -1,5 +1,6 @@
 # backend/app/main.py
 import os, json, asyncio, logging
+from dotenv import load_dotenv
 from pathlib import Path
 from typing import AsyncGenerator, Tuple, Dict, Any
 
@@ -17,6 +18,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+load_dotenv()
 
 # ─────────── Prompt templates ───────────
 SUGGESTION_PROMPT = (

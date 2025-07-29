@@ -94,7 +94,8 @@ These instructions will get you a copy of the project up and running on your loc
 
 ## Configuration
 
-You can configure the AI providers for suggestions and code generation by setting the following environment variables in your `.env` file:
+Configuration values can be placed in a `.env` file at the project root. The backend automatically loads this file on startup using `python-dotenv`.
+You can configure the AI providers for suggestions and code generation by setting the following variables:
 
 *   `SUGGESTION_PROVIDER`: Set to `openai` or `gemini` to choose the provider for suggestions.
 *   `GENERATION_PROVIDER`: Set to `openai` or `gemini` to choose the provider for code generation.
