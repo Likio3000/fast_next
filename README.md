@@ -63,9 +63,12 @@ These instructions will get you a copy of the project up and running on your loc
       python -m venv .venv
       source .venv/bin/activate # On Windows use `.venv\Scripts\activate`
       ```
-    *   Install the required Python packages:
+    *   Install the required Python packages using the project's
+      `pyproject.toml`:
       ```bash
-      pip install -r requirements.txt
+      pip install -e ..
+      # or use `uv` if available:
+      uv pip install -r ../uv.lock
       ```
     *   Copy `.env.example` to `.env` and edit it with your API keys and desired settings:
       ```bash
