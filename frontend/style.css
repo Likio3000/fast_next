@@ -228,6 +228,32 @@ pre > .copy-btn {
 
 .action-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* --- NEW: Loading Animation --- */
+.msg.loader {
+  background: var(--bg-alt);
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.loading-dots span {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: var(--fg);
+  animation: loading-pulse 1.4s infinite ease-in-out both;
+}
+
+.loading-dots span:nth-of-type(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-of-type(2) { animation-delay: -0.16s; }
+
+@keyframes loading-pulse {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1.0); }
+}
+
 /* Decorative Side Images */
 #sideLogo,
 #sideIllustration {
