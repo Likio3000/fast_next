@@ -27,15 +27,6 @@ function mkMsg(text, cls, isHtml = false) {
   return div;
 }
 
-function mkLoading(text, cls) {
-  const div = document.createElement('div');
-  div.className = `msg ${cls} loading`;
-  div.innerHTML = `<span class="loading-spinner"></span> ${text}`;
-  chatEl.appendChild(div);
-  scrollBottom();
-  return div;
-}
-
 function enhanceCodeBlocks(root) {
   root.querySelectorAll('pre code').forEach(code => {
     if (window.hljs) hljs.highlightElement(code);
@@ -107,15 +98,6 @@ function addRegenerateButton(msgDiv, originalMessage) {
 async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null) {
   sendBtn.disabled = true;
 
-  // Loading indicators
-  let loadingSuggEl = null;
-  let loadingGenEl = null;
-  if (cachedSuggestion) {
-    loadingGenEl = mkLoading('Generating code…', 'code');
-  } else {
-    loadingSuggEl = mkLoading('Fetching suggestions…', 'sugg');
-  }
-
   // streaming state – suggestions
   let suggAgent = '';
   let suggAccumMd = '';
@@ -167,10 +149,6 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
 
         /* ---------- suggestions flow ---------- */
         if (type === 'suggestions_chunk') {
-          if (loadingSuggEl) {
-            loadingSuggEl.remove();
-            loadingSuggEl = null;
-          }
           if (!suggMsgEl) {
             suggAgent = msg.agent;
             const initialHtml =
@@ -191,10 +169,6 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
         }
 
         if (type === 'suggestions_end') {
-          if (loadingSuggEl) {
-            loadingSuggEl.remove();
-            loadingSuggEl = null;
-          }
           if (msg.agent === suggAgent && suggMsgEl) {
             const cursor = suggMsgEl.querySelector('.streaming-cursor');
             if (cursor) cursor.remove();
@@ -208,18 +182,11 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
             suggMsgEl = null;
             suggContentSpan = null;
           }
-          if (!loadingGenEl) {
-            loadingGenEl = mkLoading('Generating code…', 'code');
-          }
           continue;
         }
 
         /* ---------- generated code flow ---------- */
         if (type === 'generated_code_chunk') {
-          if (loadingGenEl) {
-            loadingGenEl.remove();
-            loadingGenEl = null;
-          }
           if (!genMsgEl) {
             genAgent = msg.agent;
             const initialHtml =
@@ -257,14 +224,6 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
 
         /* ---------- error ---------- */
         if (type === 'error') {
-          if (loadingSuggEl) {
-            loadingSuggEl.remove();
-            loadingSuggEl = null;
-          }
-          if (loadingGenEl) {
-            loadingGenEl.remove();
-            loadingGenEl = null;
-          }
           const errDiv = mkMsg(
             `**Error from ${msg.agent}:**\n\n${msg.content}`,
             'error'
@@ -296,8 +255,6 @@ async function initiateFetchAndStream(messageToProcess, cachedSuggestion = null)
     const errDiv = mkMsg('Client error: ' + err.message, 'error');
     addRegenerateButton(errDiv, messageToProcess);
   } finally {
-    if (loadingSuggEl) loadingSuggEl.remove();
-    if (loadingGenEl) loadingGenEl.remove();
     sendBtn.disabled = false;
     inputEl.focus();
   }
